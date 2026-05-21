@@ -1,4 +1,4 @@
-import { aiRiskSummary } from "../lib/ai.js";
+import { aiContractAnalysis } from "../lib/ai.js";
 import { shortAddress } from "../utils/address.js";
 
 function asNumber(value) {
@@ -32,6 +32,67 @@ function ageText(pairCreatedAt) {
   if (days === 0) return "Less than 1 day";
   if (days === 1) return "1 day";
   return `${days} days`;
+}
+
+function parseJsonObject(text) {
+  const value = String(text || "").trim();
+  if (!value) return null;
+
+  const start = value.indexOf("{");
+  const end = value.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+
+  try {
+    return JSON.parse(value.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+function asList(value, fallback = []) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 5);
+  if (typeof value === "string" && value.trim()) return [value.trim()].slice(0, 5);
+  return fallback.slice(0, 5);
+}
+
+function inferRiskLevel(text, fallback) {
+  const value = String(text || "").toLowerCase();
+  if (value.includes("critical")) return "Critical";
+  if (value.includes("high risk") || value.includes("risk level: high") || value.includes('"riskLevel":"High"'.toLowerCase())) return "High";
+  if (value.includes("medium risk") || value.includes("moderate risk") || value.includes("risk level: medium")) return "Medium";
+  if (value.includes("low risk") || value.includes("risk level: low")) return "Low";
+  return fallback || "Unknown";
+}
+
+function normalizeChainGpt(result, deterministic, data) {
+  const parsed = parseJsonObject(result?.content);
+  const fallbackWarnings = deterministic.signals.slice(0, 5);
+  const tokenIdentity = parsed?.tokenIdentity || `${data?.market?.name || data?.explorer?.contractName || "Unknown token"} (${data?.market?.symbol || "UNKNOWN"})`;
+
+  if (!result?.available) {
+    return {
+      available: false,
+      riskLevel: deterministic.label,
+      tokenIdentity,
+      warnings: fallbackWarnings,
+      positives: [],
+      recommendation: "ChainGPT analysis is unavailable right now. Treat this as a degraded report and verify independently before trading.",
+      confidence: "Low",
+      raw: result?.content || ""
+    };
+  }
+
+  return {
+    available: true,
+    riskLevel: String(parsed?.riskLevel || inferRiskLevel(result.content, deterministic.label)),
+    tokenIdentity: String(parsed?.tokenIdentity || tokenIdentity),
+    chain: String(parsed?.chain || data?.chain?.name || "Unknown chain"),
+    warnings: asList(parsed?.warnings, fallbackWarnings),
+    positives: asList(parsed?.positives, []),
+    recommendation: String(parsed?.recommendation || result.content).slice(0, 900),
+    confidence: String(parsed?.confidence || "Medium"),
+    raw: result.content
+  };
 }
 
 export function deterministicRisk(data) {
@@ -115,22 +176,13 @@ export function deterministicRisk(data) {
 
 export async function assessToken(data) {
   const deterministic = deterministicRisk(data);
-  const aiSummary = await aiRiskSummary({
-    facts: {
-      chain: data?.chain?.name,
-      address: data?.address,
-      market: data?.market,
-      security: data?.security,
-      explorer: data?.explorer,
-      missing: data?.missing,
-      deterministic
-    },
-    deterministicLabel: deterministic.label
-  });
+  const chainGptResult = await aiContractAnalysis({ data, deterministic });
+  const chainGpt = normalizeChainGpt(chainGptResult, deterministic, data);
 
   return {
     deterministic,
-    aiSummary: aiSummary || `${deterministic.label} risk based on available checks. ${deterministic.signals.slice(0, 2).join(" ")}`
+    chainGpt,
+    overallRisk: chainGpt.riskLevel || deterministic.label
   };
 }
 
@@ -139,36 +191,45 @@ export function formatReport(data, assessment, { short = false, watchHint = true
   const security = data.security || {};
   const explorer = data.explorer || {};
   const risk = assessment.deterministic;
+  const chainGpt = assessment.chainGpt || {};
   const missing = data.missing?.length ? data.missing.join(", ") : "None noted";
   const source = market.pairUrl || explorer.explorerUrl || "Unavailable";
   const tokenName = market.name || explorer.contractName || "Unknown token";
   const tokenSymbol = market.symbol || "UNKNOWN";
+  const warnings = asList(chainGpt.warnings, risk.signals).slice(0, short ? 3 : 5);
+  const positives = asList(chainGpt.positives, []).slice(0, short ? 2 : 4);
 
   const lines = [
-    `Token`,
+    "Token",
     `${tokenName} (${tokenSymbol}) on ${data.chain?.name || "Unknown chain"}`,
     `Address: ${shortAddress(data.address)}`,
-    `Source: ${market.dexId || "Unavailable"}`,
     "",
-    `Market`,
+    "Market",
     `Price: ${market.priceUsd ? `$${market.priceUsd}` : "Unavailable"}`,
     `Liquidity: ${usd(market.liquidityUsd)} | FDV/MCap: ${usd(market.marketCap || market.fdv)}`,
     `24h volume: ${usd(market.volume24h)} | 24h change: ${pct(market.priceChange24h)}`,
     "",
-    `Risk Signals`,
-    `Rating: ${risk.label} (${risk.score}/100)`,
-    risk.signals.slice(0, short ? 3 : 6).join("; "),
+    "ChainGPT Risk",
+    `Overall risk: ${assessment.overallRisk || risk.label}`,
+    `Confidence: ${chainGpt.confidence || "Unavailable"}`,
+    `Warnings: ${warnings.length ? warnings.join("; ") : "No major warning returned"}`,
+    `Positives: ${positives.length ? positives.join("; ") : "None confirmed"}`,
+    `Recommendation: ${chainGpt.recommendation || "Verify independently before trading."}`,
+    "",
+    "Data Checks",
+    `Fallback score: ${risk.label} (${risk.score}/100)`,
     `Buy tax: ${security.buy_tax !== undefined ? pct(asNumber(security.buy_tax) * 100) : "Unavailable"} | Sell tax: ${security.sell_tax !== undefined ? pct(asNumber(security.sell_tax) * 100) : "Unavailable"}`,
     `Verified: ${explorer.verified === true ? "Yes" : explorer.verified === false ? "No" : "Unavailable"} | Proxy: ${explorer.proxy === true ? "Yes" : explorer.proxy === false ? "No" : "Unavailable"}`,
     `Age: ${ageText(market.pairCreatedAt)}`,
     `Unavailable data: ${missing}`,
     "",
-    `AI Summary`,
-    assessment.aiSummary,
-    "",
-    `Links`,
+    "Links",
     source
   ];
+
+  if (!chainGpt.available) {
+    lines.splice(10, 0, "ChainGPT is temporarily unavailable, so this is a degraded report using token enrichment and fallback checks.");
+  }
 
   if (watchHint) {
     lines.push("", "Watchlist Hint", `Send watch ${data.chain?.short || "eth"} ${data.address} to track it here.`);
@@ -183,5 +244,7 @@ export function formatReport(data, assessment, { short = false, watchHint = true
 
 export function formatBrief(data, assessment) {
   const market = data.market || {};
-  return `${market.symbol || "UNKNOWN"} on ${data.chain?.name || "Unknown"}: ${assessment.deterministic.label} risk, liquidity ${usd(market.liquidityUsd)}, 24h ${pct(market.priceChange24h)}. ${shortAddress(data.address)}`;
+  const riskLevel = assessment.overallRisk || assessment.deterministic?.label || "Unknown";
+  const warning = assessment.chainGpt?.warnings?.[0] || assessment.deterministic?.signals?.[0] || "No major warning returned";
+  return `${market.symbol || "UNKNOWN"} on ${data.chain?.name || "Unknown"}: ${riskLevel} risk, liquidity ${usd(market.liquidityUsd)}, 24h ${pct(market.priceChange24h)}. ${warning}. ${shortAddress(data.address)}`;
 }

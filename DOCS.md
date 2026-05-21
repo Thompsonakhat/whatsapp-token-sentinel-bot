@@ -1,13 +1,19 @@
 # Token Sentinel Bot
 
-Token Sentinel Bot is a CookMyBots managed WhatsApp brain service. Users can paste EVM contract addresses in DMs or groups and receive concise token intelligence reports with market data, security signals, deterministic risk scoring, and AI-assisted summaries.
+Token Sentinel Bot is a CookMyBots managed WhatsApp brain service. Users can paste EVM contract addresses in DMs or groups and receive concise token intelligence reports with market data, token enrichment, watchlists, and ChainGPT-backed CA risk analysis.
 
 This project does not implement WhatsApp Cloud API webhooks and does not use WhatsApp Cloud API credentials. CookMyBots handles WhatsApp connection and forwards messages to this service at POST /webhook/cookmybots/whatsapp.
 
 ## WhatsApp text commands
 
-help
+/start
+Shows the welcome and help message.
+
+/help
 Shows usage examples and supported actions.
+
+help
+Shows the same usage examples in natural WhatsApp text.
 
 analyze <address>
 Analyzes a contract address with automatic chain detection.
@@ -16,6 +22,10 @@ Example: analyze 0x0000000000000000000000000000000000000000
 analyze <chain> <address>
 Analyzes an address on a specific chain.
 Example: analyze base 0x0000000000000000000000000000000000000000
+
+scan <chain> <address>
+Short alias for analyze.
+Example: scan eth 0x0000000000000000000000000000000000000000
 
 watch <address>
 Adds a token to the current DM or group watchlist after resolving it.
@@ -37,6 +47,14 @@ Lists supported chains and short names.
 Automatic detection
 If a message contains a 0x-prefixed 40-byte EVM address, the bot analyzes it automatically. In groups, replies are shorter and multiple addresses are summarized to avoid spam.
 
+## ChainGPT CA analysis
+
+Contract address analysis is powered by ChainGPT through the CookMyBots AI Gateway. The bot sends ChainGPT the supported chain, contract address, token identity when available, market data, security signals, explorer verification signals, and missing-data notes.
+
+The final report summarizes token identity, chain or network, overall risk level, important warnings, notable positives, a short recommendation, and fallback deterministic checks. If ChainGPT times out, is rate-limited, or returns incomplete data, the bot keeps running and returns a degraded report using available enrichment instead of exposing raw provider errors.
+
+The bot does not call OpenAI directly. General AI or Web3 analysis features use src/lib/ai.js and COOKMYBOTS_AI_ENDPOINT with Authorization: Bearer COOKMYBOTS_AI_KEY.
+
 ## Supported chains
 
 Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, and Avalanche.
@@ -53,10 +71,10 @@ MONGODB_URI
 Required for persistent watchlists. If missing, analysis still works but watchlists cannot be saved.
 
 COOKMYBOTS_AI_ENDPOINT
-CookMyBots AI Gateway base URL. Defaults to https://api.cookmybots.com/api/ai.
+CookMyBots AI Gateway base URL. Defaults to https://api.cookmybots.com/api/ai. Do not append /chat or /chaingpt/chat.
 
 COOKMYBOTS_AI_KEY
-Required for AI-assisted risk summaries. If missing, the bot returns deterministic risk summaries only.
+Required for ChainGPT-backed CA analysis through the CookMyBots AI Gateway. If missing, the bot keeps running and returns degraded token enrichment reports.
 
 WEB3_CHAT_MODE
 Optional. Defaults to on so Web3 summaries route through CookMyBots ChainGPT support.
@@ -79,12 +97,14 @@ Optional. Used for GoPlus token security when present. Missing keys do not crash
 ETHERSCAN_API_KEY, BSCSCAN_API_KEY, POLYGONSCAN_API_KEY, ARBISCAN_API_KEY, OPTIMISTIC_ETHERSCAN_API_KEY, BASESCAN_API_KEY, SNOWTRACE_API_KEY
 Optional explorer keys for contract verification and proxy checks. Missing keys are reported as unavailable data.
 
+No WhatsApp Cloud API env vars are required. Do not configure WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, or WhatsApp Cloud API webhook secrets in this repo.
+
 ## Setup
 
 1) Install dependencies with npm install.
 2) Copy .env.sample to .env.
 3) Set CMB_WHATSAPP_WEBHOOK_SECRET and MONGODB_URI.
-4) Add COOKMYBOTS_AI_KEY for AI summaries.
+4) Add COOKMYBOTS_AI_KEY for ChainGPT CA analysis.
 5) Run npm run dev locally or npm start in production.
 
 ## Build and run
@@ -115,7 +135,7 @@ If webhook calls return unauthorized, confirm CMB_WHATSAPP_WEBHOOK_SECRET is set
 
 If watchlist commands fail, set MONGODB_URI.
 
-If AI summaries are missing, set COOKMYBOTS_AI_KEY and confirm COOKMYBOTS_AI_ENDPOINT is a base URL, not a /chat URL.
+If ChainGPT analysis is unavailable, set COOKMYBOTS_AI_KEY and confirm COOKMYBOTS_AI_ENDPOINT is a base URL, not a /chat URL.
 
 If security or verification checks say unavailable, add the optional provider key for that chain.
 

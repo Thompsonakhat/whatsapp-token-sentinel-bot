@@ -72,6 +72,112 @@ async function callGateway(route, body, feature) {
   return null;
 }
 
+function extractOutputText(json) {
+  return String(json?.output?.content || json?.output?.text || json?.output?.answer || "").trim();
+}
+
+function compact(value, max = 9000) {
+  return JSON.stringify(value, null, 2).slice(0, max);
+}
+
+export async function aiContractAnalysis({ data, deterministic }) {
+  const botProfile = buildBotProfile();
+
+  if (!cfg.COOKMYBOTS_AI_KEY) {
+    log.warn("chaingpt.analysis_skipped", {
+      platform: "whatsapp",
+      reason: "COOKMYBOTS_AI_KEY missing",
+      chain: data?.chain?.key || "unknown"
+    });
+    return {
+      available: false,
+      reason: "missing_key",
+      content: "ChainGPT contract analysis is temporarily unavailable because the CookMyBots AI key is not configured."
+    };
+  }
+
+  const facts = {
+    chain: {
+      key: data?.chain?.key,
+      name: data?.chain?.name,
+      chainId: data?.chain?.chainId
+    },
+    address: data?.address,
+    tokenIdentity: {
+      name: data?.market?.name || data?.explorer?.contractName || "Unknown token",
+      symbol: data?.market?.symbol || "UNKNOWN"
+    },
+    market: data?.market || {},
+    securitySignals: data?.security || {},
+    explorer: data?.explorer || {},
+    deterministicFallback: deterministic || {},
+    missingData: data?.missing || []
+  };
+
+  const question = [
+    botProfile,
+    "You are the primary ChainGPT contract-address risk analyst for this WhatsApp bot.",
+    "Analyze the contract address and the provided token enrichment. Use ChainGPT/Web3 security reasoning as the main source for CA risk analysis.",
+    "Return concise JSON only with these fields: tokenIdentity, chain, riskLevel, warnings, positives, recommendation, confidence.",
+    "Warnings should focus on relevant categories when available: honeypot risk, owner privileges, liquidity concerns, proxy or upgradeability, tax issues, contract verification, holder concentration, and scam indicators.",
+    "If you cannot fully analyze the address, say what is missing and provide a degraded but helpful risk view. Do not invent unavailable metrics.",
+    compact(facts)
+  ].join("\n\n");
+
+  try {
+    log.info("chaingpt.analysis_start", {
+      platform: "whatsapp",
+      chain: data?.chain?.key || "unknown",
+      addressSet: Boolean(data?.address)
+    });
+
+    const json = await callGateway("/chaingpt/chat", {
+      mode: "web3",
+      question,
+      meta: {
+        platform: "whatsapp",
+        feature: "contract-address-analysis",
+        chain: data?.chain?.key || "unknown"
+      }
+    }, "contract_address_analysis");
+
+    const content = extractOutputText(json);
+    if (!content) {
+      log.warn("chaingpt.analysis_incomplete", {
+        platform: "whatsapp",
+        chain: data?.chain?.key || "unknown"
+      });
+      return {
+        available: false,
+        reason: "incomplete_response",
+        content: "ChainGPT returned an incomplete contract analysis."
+      };
+    }
+
+    log.info("chaingpt.analysis_success", {
+      platform: "whatsapp",
+      chain: data?.chain?.key || "unknown",
+      contentLength: content.length
+    });
+
+    return {
+      available: true,
+      content
+    };
+  } catch (err) {
+    log.error("chaingpt.analysis_failure", {
+      platform: "whatsapp",
+      chain: data?.chain?.key || "unknown",
+      error: safeErr(err)
+    });
+    return {
+      available: false,
+      reason: "provider_error",
+      content: "ChainGPT contract analysis is temporarily unavailable. Please try again later."
+    };
+  }
+}
+
 export async function aiRiskSummary({ facts, deterministicLabel }) {
   const botProfile = buildBotProfile();
   const compactFacts = JSON.stringify(facts, null, 2).slice(0, 8000);
@@ -91,7 +197,7 @@ export async function aiRiskSummary({ facts, deterministicLabel }) {
         question: prompt,
         meta: { platform: "whatsapp", feature: "token-risk-summary" }
       }, "risk_summary_web3");
-      return String(json?.output?.content || json?.output?.text || "").trim() || null;
+      return extractOutputText(json) || null;
     }
 
     const json = await callGateway("/chat", {

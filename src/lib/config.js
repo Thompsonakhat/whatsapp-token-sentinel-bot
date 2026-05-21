@@ -38,6 +38,8 @@ export function logEnvSanity() {
     MONGODB_URI_set: Boolean(cfg.MONGODB_URI),
     COOKMYBOTS_AI_ENDPOINT_set: Boolean(cfg.COOKMYBOTS_AI_ENDPOINT),
     COOKMYBOTS_AI_KEY_set: Boolean(cfg.COOKMYBOTS_AI_KEY),
+    WEB3_CHAT_MODE: cfg.WEB3_CHAT_MODE,
+    ChainGPT_via_CookMyBots_set: Boolean(cfg.COOKMYBOTS_AI_KEY && cfg.COOKMYBOTS_AI_ENDPOINT),
     DEXSCREENER_API_BASE_URL_set: Boolean(cfg.DEXSCREENER_API_BASE_URL),
     GOPLUS_API_KEY_set: Boolean(cfg.GOPLUS_API_KEY),
     ETHERSCAN_API_KEY_set: Boolean(cfg.ETHERSCAN_API_KEY),

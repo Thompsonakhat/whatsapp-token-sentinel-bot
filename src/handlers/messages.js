@@ -33,9 +33,11 @@ function normalizeCtx(body) {
 function helpText() {
   return [
     "Token Sentinel Bot",
-    "Paste an EVM contract address and I will analyze token, market, liquidity, and risk signals.",
+    "Paste an EVM contract address and I will analyze token, market, liquidity, and ChainGPT risk signals.",
     "",
     "Try:",
+    "/start",
+    "/help",
     "analyze 0x...",
     "analyze base 0x...",
     "watch 0x...",
@@ -50,7 +52,7 @@ function helpText() {
 
 function wantsHelp(text) {
   const lower = text.toLowerCase();
-  return lower === "help" || lower === "hi" || lower === "hello" || lower.includes("what can you do");
+  return lower === "/start" || lower === "/help" || lower === "help" || lower === "hi" || lower === "hello" || lower.includes("what can you do");
 }
 
 function intentOf(text) {
@@ -96,7 +98,7 @@ function ambiguityReply(resolved) {
 
 async function analyzeOne(ctx, address, { chainHint = null, short = false } = {}) {
   const data = await getTokenIntelligence(address, chainHint);
-  if (data.error) return data.error;
+  if (data.error) return `${data.error}. Send a 0x-prefixed EVM contract address. Supported networks: ${supportedChainsText()}.`;
   if (data.ambiguous) return ambiguityReply(data);
 
   const assessment = await assessToken(data);
@@ -169,6 +171,9 @@ export async function handleWhatsAppMessage(body) {
   }
 
   if (!addresses.length) {
+    if (intent === "analyze") {
+      return `Send analyze <chain optional> <0x contract address>. Supported networks: ${supportedChainsText()}.`;
+    }
     return ctx.isGroup ? "" : "Send an EVM contract address, or type help for examples.";
   }
 
