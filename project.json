@@ -2,16 +2,95 @@
   "projectId": "b2293427-4eea-44a2-bf32-1822e43a3761",
   "commands": [
     {
-      "command": "/help",
-      "description": "List available commands",
-      "usage": "/help",
-      "example": "User sends /help → bot replies with commands."
+      "command": "help",
+      "description": "Shows WhatsApp-native usage help for token analysis and watchlists.",
+      "usage": "help",
+      "examples": [
+        "User: help → Bot: Token Sentinel Bot usage examples"
+      ],
+      "notes": "Plain text keyword, not a slash command."
+    },
+    {
+      "command": "analyze",
+      "description": "Analyzes an EVM contract address with token enrichment and ChainGPT-backed CA risk analysis.",
+      "usage": "analyze <chain optional> <address>",
+      "examples": [
+        "analyze 0x0000000000000000000000000000000000000000",
+        "analyze base 0x0000000000000000000000000000000000000000"
+      ],
+      "notes": "Also supports natural phrases like check this token 0x..."
+    },
+    {
+      "command": "watch",
+      "description": "Adds a token to the current DM or group watchlist.",
+      "usage": "watch <chain optional> <address>",
+      "examples": [
+        "watch eth 0x0000000000000000000000000000000000000000"
+      ],
+      "notes": "Requires MONGODB_URI for persistence."
+    },
+    {
+      "command": "unwatch",
+      "description": "Removes a token from the current DM or group watchlist.",
+      "usage": "unwatch <chain optional> <address>",
+      "examples": [
+        "unwatch 0x0000000000000000000000000000000000000000"
+      ],
+      "notes": "If no chain is provided, matching addresses in the current scope are removed."
+    },
+    {
+      "command": "watchlist",
+      "description": "Shows saved tokens for the current DM or group chat.",
+      "usage": "watchlist",
+      "examples": [
+        "watchlist"
+      ],
+      "notes": "DM and group watchlists are stored separately."
+    },
+    {
+      "command": "clear watchlist",
+      "description": "Clears all saved tokens from the current DM or group watchlist.",
+      "usage": "clear watchlist",
+      "examples": [
+        "clear watchlist"
+      ],
+      "notes": "Only affects the current conversation scope."
+    },
+    {
+      "command": "chains",
+      "description": "Lists supported EVM chains and short names.",
+      "usage": "chains",
+      "examples": [
+        "chains"
+      ],
+      "notes": "Supported chains include Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, and Avalanche."
     },
     {
       "command": "/start",
-      "description": "Show welcome message",
+      "description": "Shows the welcome and help message.",
       "usage": "/start",
-      "example": "User sends /start → bot replies with intro."
+      "examples": [
+        "User: /start → Bot: Token Sentinel Bot usage examples"
+      ],
+      "notes": "WhatsApp text command handled by the brain service."
+    },
+    {
+      "command": "/help",
+      "description": "Shows usage examples and supported token intelligence actions.",
+      "usage": "/help",
+      "examples": [
+        "User: /help → Bot: analyze, watch, watchlist, chains"
+      ],
+      "notes": "The plain text help keyword is also supported."
+    },
+    {
+      "command": "scan",
+      "description": "Short alias for analyze.",
+      "usage": "scan <chain optional> <address>",
+      "examples": [
+        "scan eth 0x0000000000000000000000000000000000000000"
+      ],
+      "notes": "Useful in groups for concise reports."
     }
   ],
   "aiMessages": [
@@ -22,6 +101,14 @@
     {
       "role": "assistant",
       "content": "Built the WhatsApp Token Sentinel brain service with EVM address detection, token reports, AI risk summaries, MongoDB watchlists, provider fallbacks, safe logging, and DOCS.md.\n\nFiles touched (20): .env.sample, DOCS.md, package.json, project.json, scripts/verify-imports.js, src/bot.js…\nValidation: ✅ project passes syntax/basic checks after this edit."
+    },
+    {
+      "role": "user",
+      "content": "can we use chaingpt instead for CA analysis"
+    },
+    {
+      "role": "assistant",
+      "content": "Refined CA analysis to use ChainGPT through the CookMyBots AI Gateway as the primary risk provider, preserved token enrichment and watchlists, updated help/docs/env samples, and kept WhatsApp managed transport only. Per CookMyBots safety rules, no direct ChainGPT API key or endpoint was introduced; ChainGPT is accessed via COOKMYBOTS_AI_KEY.\n\nFiles touched (9): .env.sample, DOCS.md, README.md, package.json, src/handlers/messages.js, src/lib/ai.js…\nValidation: ✅ project passes syntax/basic checks after this edit."
     }
   ],
   "createdBy": "695397c85603fcac4c8ea626",
@@ -449,7 +536,7 @@
       "runId": "b2293427-4eea-44a2-bf32-1822e43a3761:mpf0td3s:09gjpd",
       "lastUserMessage": "can we use chaingpt instead for CA analysis",
       "startedAt": "2026-05-21T04:52:30.278Z",
-      "updatedAt": "2026-05-21T05:01:52.953Z",
+      "updatedAt": "2026-05-21T05:01:53.476Z",
       "message": "Syncing environment template with used env variables…",
       "commands": [],
       "ok": true,
@@ -853,7 +940,7 @@
     "runId": "b2293427-4eea-44a2-bf32-1822e43a3761:mpf0td3s:09gjpd",
     "lastUserMessage": "can we use chaingpt instead for CA analysis",
     "startedAt": "2026-05-21T04:52:30.278Z",
-    "updatedAt": "2026-05-21T05:01:52.953Z",
+    "updatedAt": "2026-05-21T05:01:53.476Z",
     "message": "Syncing environment template with used env variables…",
     "commands": [],
     "ok": true,
@@ -1268,13 +1355,13 @@
       "usage": "Used by src/lib/db.js and src/services/watchlist.js.",
       "example": "mongodb+srv://user:password@cluster/db",
       "isSecret": true,
-      "required": true
+      "required": false
     },
     {
       "key": "COOKMYBOTS_AI_ENDPOINT",
       "title": "CookMyBots AI Endpoint",
-      "description": "Base URL for CookMyBots AI Gateway. Do not append /chat.",
-      "usage": "The bot appends /chaingpt/chat or /chat when making AI calls.",
+      "description": "Base URL for CookMyBots AI Gateway. Do not append /chat or /chaingpt/chat.",
+      "usage": "The bot appends /chaingpt/chat for ChainGPT contract analysis and /chat for any general chat calls.",
       "example": "https://api.cookmybots.com/api/ai",
       "isSecret": false,
       "required": true
@@ -1282,8 +1369,8 @@
     {
       "key": "COOKMYBOTS_AI_KEY",
       "title": "CookMyBots AI Key",
-      "description": "Authorizes AI-assisted risk summaries through CookMyBots AI Gateway.",
-      "usage": "Sent as Authorization: Bearer <key>.",
+      "description": "Authorizes ChainGPT-backed contract address analysis through the CookMyBots AI Gateway.",
+      "usage": "Sent as Authorization: Bearer <key> by src/lib/ai.js.",
       "example": "cmb_ai_key_format_only",
       "isSecret": true,
       "required": true
@@ -1291,8 +1378,8 @@
     {
       "key": "WEB3_CHAT_MODE",
       "title": "Web3 Chat Mode",
-      "description": "Controls ChainGPT routing through the CookMyBots AI Gateway.",
-      "usage": "Default on for token and Web3 risk summaries.",
+      "description": "Controls Web3 routing through the CookMyBots AI Gateway.",
+      "usage": "Defaults to on for token and Web3 risk analysis.",
       "example": "on",
       "isSecret": false,
       "required": false
@@ -1427,13 +1514,13 @@
     },
     {
       "command": "analyze",
-      "description": "Analyzes an EVM contract address with market data, security signals, and an AI-assisted risk summary.",
+      "description": "Analyzes an EVM contract address with token enrichment and ChainGPT-backed CA risk analysis.",
       "usage": "analyze <chain optional> <address>",
       "examples": [
         "analyze 0x0000000000000000000000000000000000000000",
         "analyze base 0x0000000000000000000000000000000000000000"
       ],
-      "notes": "Also works through natural phrases like check this token 0x..."
+      "notes": "Also supports natural phrases like check this token 0x..."
     },
     {
       "command": "watch",
@@ -1479,6 +1566,33 @@
         "chains"
       ],
       "notes": "Supported chains include Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, and Avalanche."
+    },
+    {
+      "command": "/start",
+      "description": "Shows the welcome and help message.",
+      "usage": "/start",
+      "examples": [
+        "User: /start → Bot: Token Sentinel Bot usage examples"
+      ],
+      "notes": "WhatsApp text command handled by the brain service."
+    },
+    {
+      "command": "/help",
+      "description": "Shows usage examples and supported token intelligence actions.",
+      "usage": "/help",
+      "examples": [
+        "User: /help → Bot: analyze, watch, watchlist, chains"
+      ],
+      "notes": "The plain text help keyword is also supported."
+    },
+    {
+      "command": "scan",
+      "description": "Short alias for analyze.",
+      "usage": "scan <chain optional> <address>",
+      "examples": [
+        "scan eth 0x0000000000000000000000000000000000000000"
+      ],
+      "notes": "Useful in groups for concise reports."
     }
   ]
 }
